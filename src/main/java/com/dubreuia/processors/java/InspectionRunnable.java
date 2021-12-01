@@ -62,16 +62,18 @@ class InspectionRunnable implements Runnable {
     public void run() {
         InspectionManager inspectionManager = InspectionManager.getInstance(project);
         GlobalInspectionContext context = inspectionManager.createNewGlobalContext();
-        InspectionToolWrapper toolWrapper = new LocalInspectionToolWrapper(inspectionTool);
-        for (PsiFile psiFile : psiFiles) {
-            List<ProblemDescriptor> problemDescriptors = getProblemDescriptors(context, toolWrapper, psiFile);
-            for (ProblemDescriptor problemDescriptor : problemDescriptors) {
-                QuickFix[] fixes = problemDescriptor.getFixes();
-                if (fixes != null) {
-                    writeQuickFixes(problemDescriptor, fixes);
-                }
-            }
-        }
+
+        var toolWrapper = new LocalInspectionToolWrapper(inspectionTool);
+
+        psiFiles.forEach(psiFile -> getProblemDescriptors(context, toolWrapper, psiFile)
+                .forEach(problemDescriptor -> {
+                    var fixes = problemDescriptor.getFixes();
+                    if (fixes != null) {
+                        writeQuickFixes(problemDescriptor, fixes);
+                    }
+                })
+        );
+
     }
 
     private List<ProblemDescriptor> getProblemDescriptors(GlobalInspectionContext context,
@@ -87,13 +89,11 @@ class InspectionRunnable implements Runnable {
         return problemDescriptors;
     }
 
-    private void writeQuickFixes(ProblemDescriptor problemDescriptor, QuickFix[] fixes) {
-        for (QuickFix fix : fixes) {
-            @SuppressWarnings("unchecked")
-            QuickFix<ProblemDescriptor> typedFix = (QuickFix<ProblemDescriptor>) fix;
+    private void writeQuickFixes(ProblemDescriptor problemDescriptor, QuickFix<ProblemDescriptor>[] fixes) {
+        for (QuickFix<ProblemDescriptor> fix : fixes) {
             if (fix != null) {
                 try {
-                    typedFix.applyFix(project, problemDescriptor);
+                    fix.applyFix(project, problemDescriptor);
                 } catch (Exception e) {
                     LOGGER.error(e.getMessage(), e);
                 }

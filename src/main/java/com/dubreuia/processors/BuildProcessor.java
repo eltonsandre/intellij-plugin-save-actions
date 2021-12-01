@@ -34,14 +34,16 @@ import com.intellij.debugger.ui.HotSwapUI;
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
-import com.intellij.openapi.actionSystem.DataContext;
 import com.intellij.openapi.actionSystem.ex.QuickList;
 import com.intellij.openapi.actionSystem.ex.QuickListsManager;
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext;
 import com.intellij.openapi.compiler.CompilerManager;
+import com.intellij.openapi.editor.Editor;
+import com.intellij.openapi.editor.impl.EditorImpl;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.psi.PsiFile;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -91,24 +93,34 @@ public enum BuildProcessor implements Processor {
                 Map<Integer, QuickList> quickListsIds = Arrays
                         .stream(QuickListsManager.getInstance().getAllQuickLists())
                         .collect(toMap(QuickList::hashCode, identity()));
+
                 List<QuickList> quickLists = SaveActionManager.INSTANCE.getStorage(project)
                         .getQuickLists().stream()
                         .map(Integer::valueOf)
                         .map(quickListsIds::get)
                         .filter(Objects::nonNull)
                         .collect(toList());
+
                 for (QuickList quickList : quickLists) {
                     String[] actionIds = quickList.getActionIds();
+
+                    var fileEditorManager = FileEditorManager.getInstance(project);
+                    Editor selectedTextEditor = fileEditorManager.getSelectedTextEditor();
+                    if (!quickListIsApplicable(quickList, selectedTextEditor)) {
+                        continue;
+                    }
+
                     for (String actionId : actionIds) {
                         AnAction action = ActionManager.getInstance().getAction(actionId);
                         if (action == null) {
                             continue;
                         }
-                        DataContext dataContext = SimpleDataContext.builder()
+
+                        var dataContext = SimpleDataContext.builder()
                                 .add(PROJECT, project)
                                 .add(EDITOR, FileEditorManager.getInstance(project).getSelectedTextEditor())
-                                .setParent(null)
                                 .build();
+
                         AnActionEvent event = AnActionEvent.createFromAnAction(action, null, UNKNOWN, dataContext);
                         action.actionPerformed(event);
                     }
@@ -118,9 +130,22 @@ public enum BuildProcessor implements Processor {
         public SaveCommand getSaveCommand(Project project, Set<PsiFile> psiFiles) {
             return new SaveReadCommand(project, psiFiles, getModes(), getAction(), getCommand());
         }
+
     },
 
     ;
+
+    private static boolean quickListIsApplicable(QuickList quickList, Editor editor) {
+        String description = quickList.getDescription();
+        if (description == null || !description.endsWith("ONLY")) {
+            return true;
+        }
+        if (editor instanceof EditorImpl) {
+            @NotNull String extension = ((EditorImpl) editor).getVirtualFile().getFileType().getDefaultExtension();
+            return description.endsWith(extension + " ONLY");
+        }
+        return false;
+    }
 
     private final Action action;
     private final BiFunction<Project, PsiFile[], Runnable> command;
