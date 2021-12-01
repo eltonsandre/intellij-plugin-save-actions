@@ -37,8 +37,7 @@ function change_version() {
   echo "Updating ${source} -> ${target}"
 
   for file in "build.gradle" \
-    "docs/badge-jetbrains-website.svg" \
-    "src/main/resources/META-INF/plugin.xml"; do
+    "docs/badge-jetbrains-website.svg"; do
     sed "s/${source}/${target}/g" ${file} >${file}.next && mv ${file}.next ${file}
   done
 }
